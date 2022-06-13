@@ -1,4 +1,12 @@
-# proxy lab
+# load balancer part
+review: 3种 strategy
+round robin
+weighted round robin
+least connections
+
+采用round robin方式,如果某一个backend挂机了,就把流量分配到其他正在运行的backend上
+
+# proxy lab part
 
 - step 1: 创建一个proxy
   - 可以接收来自client的连接；

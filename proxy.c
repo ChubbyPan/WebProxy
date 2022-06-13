@@ -4,7 +4,8 @@
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
-
+#define SBUFSIZE 16 // buffer maxsize
+#define NTHREADS 4
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
@@ -25,15 +26,16 @@ void clienterror(int fd, char *cause, char *errnum,
 
 void request_to_proxy(int fd );
 int send_to_server(int fd, struct URI *uri_data);
+void *thread(void *vargp);
 
-
+// sbuf_t sbuf; // shared buffer of connected descriptors
 
 int main(int argc, char **argv){
-    int listenfd, connfd;
+    int listenfd, *connfd;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
-
+    pthread_t tid;
     /* Check command line args */
     if (argc != 2) {
 	    fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -41,16 +43,30 @@ int main(int argc, char **argv){
     }
     /* listen from client*/
     listenfd = Open_listenfd(argv[1]);
+
+    // sbuf_init(&sbuf, SBUFSIZE);
     while (1) {
 	    clientlen = sizeof(clientaddr);
-	    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //proxy connected with client
+        connfd = Malloc(sizeof(int));
+	    *connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //proxy connected with client
         Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0); 
         printf("Accepted connection from (%s, %s)\n", hostname, port);
-	    request_to_proxy(connfd);    //client request to proxy, proxy redirect to server
-	    Close(connfd);                                            //line:netp:tiny:close
+	    // request_to_proxy(connfd);    //client request to proxy, proxy redirect to server
+	    // Close(connfd);                                             //line:netp:tiny:close
+        Pthread_create(&tid, NULL, thread, connfd);
+
     }
 
     return 0;
+}
+
+void *thread(void *vargp){
+    int connfd = *((int *)vargp);
+    Pthread_detach(pthread_self());
+    Free(vargp);
+    request_to_proxy(connfd);
+    close(connfd);
+    return NULL;
 }
 
 /* 
