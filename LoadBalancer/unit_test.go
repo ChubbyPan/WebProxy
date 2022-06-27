@@ -5,6 +5,7 @@ import (
 	// "flag"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -61,7 +62,7 @@ func TestSetAliveAndIsAlive(t *testing.T) {
 
 func GetNewBackend() *url.URL {
 	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("this is the first backend")
+		fmt.Fprintln(w, "this call was relayed by the reverse proxy")
 	}))
 	defer backendServer.Close()
 	URL, _ := url.Parse(backendServer.URL)
@@ -139,32 +140,74 @@ func TestGetRetryFromContext(t *testing.T) {
 
 }
 
-func TestLbMoreThanThree(t *testing.T) {
-	var serverPool ServerPool
-	backendServerURL := GetNewBackend()
+// func TestLbMoreThanThree(t *testing.T) {
+// 	var serverPool ServerPool
+// 	backendServerURL := GetNewBackend()
 
-	proxy := httputil.NewSingleHostReverseProxy(backendServerURL)
-	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, e error) {
-		// attempts := GetAttemptsFromContext(request)
-		attempts := 4
-		log.Printf("%s(%s) Attempting retry %d\n", request.RemoteAddr, request.URL.Path, attempts)
-		ctx := context.WithValue(request.Context(), Attempts, attempts+1)
-		// attempts < 3, dead loop, recurse
-		lb(writer, request.WithContext(ctx))
+// 	proxy := httputil.NewSingleHostReverseProxy(backendServerURL)
+// 	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, e error) {
+// 		// attempts := GetAttemptsFromContext(request)
+// 		attempts := 4
+// 		log.Printf("%s(%s) Attempting retry %d\n", request.RemoteAddr, request.URL.Path, attempts)
+// 		ctx := context.WithValue(request.Context(), Attempts, attempts+1)
+// 		// attempts < 3, dead loop, recurse
+// 		lb(writer, request.WithContext(ctx))
+// 	}
+// 	serverPool.AddBackend(&Backend{
+// 		URL:          backendServerURL,
+// 		Alive:        true,
+// 		ReverseProxy: proxy,
+// 	})
+// 	frontProxy := httptest.NewServer(serverPool.GetNextPeer().ReverseProxy)
+// 	defer frontProxy.Close()
+
+// 	req, err := http.NewRequest("GET", frontProxy.URL, nil)
+// 	if err != nil {
+// 		t.Errorf("%v", err)
+// 	}
+
+// 	client := http.Client{}
+// 	client.Do(req)
+// }
+
+// // first, build a backend server,
+// // use httputil.NewSingleHostReverseProxy(rpURL) as proxy
+
+// // next build a front server
+// // get http response from backend server
+func TestReverseProxy(t *testing.T) {
+	var serverPool ServerPool
+
+	// backendurl := GetNewBackend()
+	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "this call was relayed by the reverse proxy")
+	}))
+	defer backendServer.Close()
+
+	rpURL, err := url.Parse(backendServer.URL)
+	if err != nil {
+		log.Fatal(err)
 	}
 	serverPool.AddBackend(&Backend{
-		URL:          backendServerURL,
+		URL:          rpURL,
 		Alive:        true,
-		ReverseProxy: proxy,
+		ReverseProxy: httputil.NewSingleHostReverseProxy(rpURL),
 	})
-	frontProxy := httptest.NewServer(serverPool.GetNextPeer().ReverseProxy)
-	defer frontProxy.Close()
 
-	req, err := http.NewRequest("GET", frontProxy.URL, nil)
+	frontedProxy := httptest.NewServer(serverPool.backends[0].ReverseProxy)
+	defer frontedProxy.Close()
+
+	resp, err := http.Get(frontedProxy.URL)
 	if err != nil {
-		t.Errorf("%v", err)
+		log.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if string(body)[:42] != string("this call was relayed by the reverse proxy") {
+		t.Errorf("%s", string(body))
+		t.Errorf("%s", string("this call was relayed by the reverse proxy"))
 	}
 
-	client := http.Client{}
-	client.Do(req)
 }
