@@ -115,6 +115,7 @@ func lb(w http.ResponseWriter, r *http.Request) {
 	peer := serverPool.GetNextPeer()
 	if peer != nil {
 		peer.ReverseProxy.ServeHTTP(w, r)
+		log.Printf("This is %v server handlering", peer)
 		return
 	}
 	http.Error(w, "Service not available", http.StatusServiceUnavailable)
@@ -167,6 +168,7 @@ var serverPool ServerPool
 
 func main() {
 	var port int
+	port = 1234
 	backendServer1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "this call was relayed by the reverse proxy1")
 	}))
