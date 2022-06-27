@@ -60,7 +60,21 @@ func TestNextIndex(t *testing.T) {
 	}
 }
 
-// func TestGetNextPeer(t *testing.T) {
-// 	var serverPool ServerPool
+func TestGetNextPeer(t *testing.T) {
+	var serverPool ServerPool
+	backend1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("This is a backent")
+	}))
+	defer backend1.Close()
+	URL, err := url.Parse(backend1.URL)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// }
+	serverPool.AddBackend(&Backend{
+		URL:          URL,
+		Alive:        true,
+		ReverseProxy: httputil.NewSingleHostReverseProxy(URL),
+	})
+
+}
