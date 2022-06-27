@@ -41,6 +41,20 @@ func (s *ServerPool) NextIndex() int {
 	return int(atomic.AddUint64(&s.current, uint64(1)) % uint64(len(s.backends)))
 }
 
+func (b *Backend) SetAlive(alive bool) {
+	b.mux.Lock()
+	b.Alive = alive
+	b.mux.Unlock()
+
+}
+
+func (b *Backend) IsAlive() (alive bool) {
+	b.mux.RLock()
+	alive = b.Alive
+	b.mux.RUnlock()
+	return
+}
+
 // skip dead backends during the next pick
 // treverse find next alive backend
 func (s *ServerPool) GetNextPeer() *Backend {
@@ -58,20 +72,6 @@ func (s *ServerPool) GetNextPeer() *Backend {
 	return nil
 }
 
-func (b *Backend) SetAlive(alive bool) {
-	b.mux.Lock()
-	b.Alive = alive
-	b.mux.Unlock()
-
-}
-
-func (b *Backend) IsAlive() (alive bool) {
-	b.mux.RLock()
-	alive = b.Alive
-	b.mux.RUnlock()
-	return
-}
-
 // MarkBackendStatus changes a status of a backend
 func (s *ServerPool) MarkBackendStatus(backendUrl *url.URL, alive bool) {
 	for _, b := range s.backends {
@@ -81,6 +81,11 @@ func (s *ServerPool) MarkBackendStatus(backendUrl *url.URL, alive bool) {
 		}
 	}
 }
+
+const (
+	Attempts int = iota
+	Retry
+)
 
 // GetAttemptsFromContext returns the attempts for request
 func GetAttemptsFromContext(r *http.Request) int {
@@ -118,11 +123,6 @@ func lb(w http.ResponseWriter, r *http.Request) {
 // route traffic only to healthy backends, two ways:
 // active way:while current request coming, select a backend if it's unresponsive, mark it as down
 // passive way: ping backends on fixed intervals and check status
-
-const (
-	Attempts int = iota
-	Retry
-)
 
 // passive check way:
 func isBackendAlive(u *url.URL) bool {
